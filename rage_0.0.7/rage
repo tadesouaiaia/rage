@@ -1,0 +1,258 @@
+#!/usr/bin/env python
+#from src.Rage import Rage
+#from collections import defaultdict as dd
+#import pickle
+
+
+def input_error(msg):
+	sys.stderr.write(msg+'\n')
+	sys.exit()
+
+default_colordict = {'AXIS': '#eaeaf2', 'FACE': 'white', 'RESULTS': '#542788','SIMS': '#f1a340', 'FOUND':'#998ec3', 'FALSEPOS':'#fee0b6' }	
+
+########################################################################################################################################################################
+
+if __name__ == '__main__':
+
+	import sys,os,argparse,shutil
+				
+	class MyParser(argparse.ArgumentParser):
+		formatter_class=argparse.RawTextHelpFormatter
+		def error(self, detail=None,values=None,choice=None):
+			
+			if not detail: self.print_help()
+
+			elif detail and values and choice:
+				sys.stderr.write(str('InvalidOption:\n'))
+				sys.stderr.write(str(values+" "+" ".join(choice)+'\n'))
+				sys.stderr.write(str(detail)+'\n')
+
+				self.print_help()
+			elif detail:
+				sys.stderr.write(str(detail)+'\n')
+				self.print_help()
+
+				sys.exit(2)
+
+	def create_plot_colors(colorstring):
+			colordict = default_colordict
+			try: 	
+				for kv in colorstring.split(','): 
+			#		if len(kv.split('=')) != 2: continue 
+					if kv.split('=')[0][0:4].upper() == 'FACE': colordict['FACE'] = kv.split('=')[1] 
+					elif kv.split('=')[0][0:7].upper() == 'RESULTS': colordict['RESULTS'] = kv.split('=')[1]
+					elif kv.split('=')[0][0:4].upper() == 'SIMS': colordict['SIMS'] = kv.split('=')[1]
+					elif kv.split('=')[0][0:5].upper() == 'FOUND': colordict['FOUND'] = kv.split('=')[1]
+					elif kv.split('=')[0][0:8].upper() == 'FALSEPOS': colordict['FALSEPOS'] = kv.split('=')[1]
+					elif kv.split('=')[0][0:2].upper() == 'AX': colordict['AXIS'] = kv.split('=')[1] 
+					else: 					    colordict[kv.split('=')[0].upper()]= kv.split('=')[1] 
+				if 'STYLE' in colordict:  
+					if colordict['STYLE'] == 'springtime': return {'AXIS': 'thistle', 'FACE': 'cornflowerblue'}
+					elif colordict['STYLE'] == 'halloween': return {'AXIS': 'black', 'FACE': 'orange'}
+					
+				return colordict 
+			except: 
+				sys.stderr.write('Color Dict requires comma separated pairs, eg : FACE=red,AXIS=blue,RESULTS=pink,SIMS=purple,FOUND=pink,FALSEPOS=purple\n\n') 
+				sys.exit() 
+
+	parser=MyParser(formatter_class=argparse.RawTextHelpFormatter)
+#	parser.set_defaults(dataset=None)
+	help_format="%-40s %40s"
+	sub_format="%-40s %40s"
+	subs = parser.add_subparsers(help=(help_format % ('Commands','Description')),dest='option',title='Commands') 
+	sub_help = (help_format % ('Description','Example'))
+	fc = argparse.RawTextHelpFormatter
+
+
+########################################################################################################################################################################
+########################################################################################################################################################################
+# GLOBAL PARENT OPTIONS ###############################################################################################################################################
+	
+	Plot = MyParser(add_help=False,formatter_class=fc)
+	#Paths.add_argument('--counts',type=argparse.FileType('r'),default=None,help='foo') 
+	Plot.add_argument('--color', dest='color',nargs='+',type=str,default=[],metavar='',help='Predictor variables for regression')
+	Plot.add_argument('--marker', dest='marker',action='store',type=str,default=None,help='Title Prefix for Figures')
+	Plot.add_argument('--size', dest='size',action='store',type=str,default=None,help='Title Prefix for Figures')
+	Plot.add_argument('--plotnames', dest='plotnames',action='store_true',default=False,help='Title Prefix for Figures')
+	Plot.add_argument('--title', dest='title',action='store',type=str,default=None,help='Title Prefix for Figures')
+	Plot.add_argument('--show',action='store_true', dest='show',default=False,help='Show Figures as they are created')
+	Plot.add_argument('--plotColors', type=create_plot_colors, default = default_colordict) 
+
+	Paths = MyParser(add_help=False)
+	Paths.add_argument('--verbose',action='store_true', dest='verbose',default=False,help='Talkative?')
+	Paths.add_argument('--prune', dest='prune',nargs='+',type=str,default=[],help=argparse.SUPPRESS) #'Predictor variables for regression')
+#	Paths.add_argument('--minobsrate', dest='min_obs_rate',type=float,default=0.02,help=argparse.SUPPRESS) 
+	Paths.add_argument('--prefix', dest='prefix',action='store',type=str,default=None,help='Output Prefix for Files')
+	Paths.add_argument('--test', dest='test',action='store',type=int,default=0,help=argparse.SUPPRESS) 
+	command_parsers = {} 
+	
+	Counts = MyParser(add_help=False,formatter_class=fc)
+	Counts.add_argument('-c','--counts',type=argparse.FileType('r'),nargs='+',default=[],required=True,help='') 
+	Counts.add_argument('--minobsrate', dest='min_obs_rate',type=float,default=0.0,help='Fraction of samples with nonzero expression eg 0.1')
+	Counts.add_argument('--mingroupsize', dest='mingroupsize',type=int,default=5,help='Fraction of samples with nonzero expression eg 0.1')
+	Counts.add_argument('--maxgroups', dest='maxgroups',action='store',type=int,default=20,help='Maximum number of psuedo-variables for each binary variable')
+	Counts.add_argument('--condensedcnts',type=argparse.FileType('r'),nargs='+',default=[]) 
+	Counts.add_argument('--sampleKey',type=argparse.FileType('r'),default=None,help='key for sample annotation',metavar='') 
+	Counts.add_argument('--featureKey',type=argparse.FileType('r'),default=None,help='key for feature annotation',metavar='') 
+	Counts.add_argument('--allowNA',action='store_true', dest='allowNA',default=False,help='Allow NA for covariates')
+	Counts.add_argument('--ratios',type=argparse.FileType('r'),help='Precomputed RatioFile',metavar='') 
+	Counts.add_argument('--notes', dest='notes',nargs='+',type=str,default=[],help=argparse.SUPPRESS) #'Predictor variables for regression')
+	command_parsers = {} 
+	
+	Norm = MyParser(add_help=False)
+	Norm.add_argument('--krange', dest='krange',action='store',type=str,default='2,10',help='Min and Max group size for k-cluster (eg. 3,10 )')
+	Norm.add_argument('--size', dest='size',action='store',type=int,default=0,help='Downsample Parameter')
+	Norm.add_argument('--rankObservations', dest='rankObservations',action='store',type=int,default=0,help='Percent (0-100) required for quantile inclusion')
+	Norm.add_argument('--ds',type=argparse.FileType('r'),help='Precomputed Downsampling Numbers') 
+	Norm.add_argument('--solver',type=argparse.FileType('r'),help='Precomputed Downsampling Numbers') 
+	norm_help = (help_format % ('downsample,quantiles,gad','Normalize data'))
+	norm = subs.add_parser('norm',help=norm_help).add_subparsers(help='Options',dest='command',title="Commands")	
+	#gad   = norm.add_parser('gad',parents=[Counts,Paths,Norm], help='./rage norm gad --c gene.cnts')
+	ratios   = norm.add_parser('ratios',parents=[Counts,Paths,Norm], help='./rage norm gad --c gene.cnts')
+	downsample  = norm.add_parser('downsample',parents=[Counts,Paths,Norm], help='./rage norm downsample --c gene.cnts --size 20000')
+	quantiles  = norm.add_parser('quantiles',parents=[Counts,Paths,Norm], help='./rage norm quantiles --counts gene.cnts ')
+	rpkm   = norm.add_parser('rpkm',parents=[Counts,Paths,Norm], help='./rage norm rpkm --c gene.cnts')
+	size_factors   = norm.add_parser('size-factors',parents=[Counts,Paths,Norm], help='./rage norm size-factors --c gene.cnts')
+	ranks   = norm.add_parser('rank',parents=[Counts,Paths,Norm], help='./rage norm rank --c gene.cnts')
+	top   = norm.add_parser('top',parents=[Counts,Paths,Norm], help='./rage norm rank --c gene.cnts')
+
+	command_parsers.update(norm.choices) 
+	Summarize = MyParser(add_help=False)
+	Summarize.add_argument('--pca',action='store_true', dest='pca',default=False,help='Show PCA')
+	Summarize.add_argument('--tsne',action='store_true', dest='tsne',default=False,help='Show PCA')
+	summarize_help = (help_format % ('features,samples','Summarize expression data'))
+	summarize = subs.add_parser('summarize',help=summarize_help,formatter_class=fc).add_subparsers(help='Examples:',dest='command',title="Commands")
+	
+	genes   = summarize.add_parser('features',formatter_class=fc,parents=[Paths,Counts,Plot,Summarize], help='./rage summarize  features    --counts ss.coding.cnts ')
+	ratios   = summarize.add_parser('ratios',formatter_class=fc,parents=[Paths,Counts,Plot,Summarize], help='./rage summarize  ratios    --counts ss.coding.cnts ')
+	samples   = summarize.add_parser('samples',parents=[Paths,Counts,Plot,Summarize], help='./rage summarize samples --counts ss.coding.cnts ')
+
+	Regression = MyParser(add_help=False)
+	Regression.add_argument('--predictors', dest='predictors',nargs='+',type=str,default=['obs'],help='Predictor variables for regression',metavar='')
+	Regression.add_argument('--covariates', dest='covariates',nargs='+',type=str,default=[],help='Covariate variables for regression')
+	Regression.add_argument('--zp', dest='zero_prob',type=str,default=None,help='Covariate variable zero prob')
+#	Regression.add_argument('--allowNA',action='store_true', dest='allowNA',default=False,help='Allow NA for covariates')
+	Regression.add_argument('--plotall',action='store_true', dest='plotall',default=False,help='Allow NA for covariates')
+	#Regression.add_argument('--model', dest='model',type=str,default='OLS',help='Model Type')
+	Regression.add_argument('--dist', dest='dist',nargs='+',type=str,default=['OLS'],help='Model Distribution: OLS,OLS-LOG,GP,ZGP',metavar='')
+#	Regression.add_argument('--dist', dest='dist',type=str,default='OLS',help='Model Distribution')
+#	Regression.add_argument('--outlierRate', dest='outlier_rate',action='store',type=float,default=0.09,help='Percentage of samples removed as outliers')
+	Regression.add_argument('--simulations', dest='simulations',action='store',type=int,default=1,help='Percentage of samples removed as outliers',metavar='')
+	Regression.add_argument('--saveresids',action='store_true', dest='saveresids',default=False,help='Save Resids')
+	Regression.add_argument('--permutepvs',action='store_true', dest='permutepvs',default=False,help='Permute Pvalues')
+	Regression.add_argument('--maxtrials', dest='maxtrials',action='store',type=int,default=100,help='Maximum number of permutation trials')
+
+
+
+	Regression_help = (help_format % ('dex,eva','Run Regression Analysis'))
+	regression = subs.add_parser('regression',help=Regression_help,formatter_class=fc).add_subparsers(help='Examples:',dest='command',title="Commands")
+	
+
+	dex =  regression.add_parser('dex',parents=[Paths,Counts,Plot,Regression], help='./rage regression dex --counts mycnts.txt --predictors MYPRED --covariates COVAR1')
+	e_preds = regression.add_parser('eval-predictors',parents=[Paths,Counts,Plot,Regression], help='./rage regression eval-predictors --counts mycnts.txt --predictors MYPRED ')
+	e_model = regression.add_parser('eval-model',parents=[Paths,Counts,Plot,Regression], help='./rage regression eval-model -c mycnts.txt --predictors MYPRED --covariates COVAR1')	
+	simp = regression.add_parser('sim-predictor',parents=[Paths,Counts,Plot,Regression], help='./rage regression simulate-predictor --counts mycnts.txt --predictors MYPRED --covariates COVAR1')
+	#e_cov =regression.add_parser('eval-covariates',parents=[Paths,Counts,Plot,Regression], help='./rage regression eval-covariates -c mycnts.txt --predictors MYPRED --covariates COVAR1')
+	
+#	eval_data = regression.add_parser('eval-data',parents=[Paths,Plot,Regression], help='./rage regression select-model --counts mycnts.txt --predictors MYPRED --covariates COVAR1')
+	#eval_model.add_argument( '--init', dest='init',action='store',type=str,default='pca',help='Data to be analyzed')
+#	find_batches = regression.add_parser('find-batches',parents=[Paths,Plot,Regression], help='./rage dex anova  -p treatment')
+
+	Classify = MyParser(add_help=False)
+	Classify.add_argument('--fitdists',action='store_true', dest='fitdists',default=False,help='center means?')
+	Classify.add_argument('--id', dest='id',nargs='+',type=str,default=['total'],help='Identity variable(s) for classification')
+	Classify.add_argument('--covariates', dest='covariates',nargs='+',type=str,default=[],help='Covariate variables for classification')
+	Classify.add_argument('--leave', dest='leave',action='store',type=int,default=20,help='Downsample Parameter')
+	Classify.add_argument('--markeronly',action='store_true', dest='markeronly',default=False,help='Talkative?')
+	Classify.add_argument('--raw',action='store_true', dest='raw',default=False,help='Talkative?')
+	#Classify.add_argument('--allowNA',action='store_true', dest='allowNA',default=False,help='Allow NA for covariates')
+	Classify.add_argument('--model', dest='model',type=str,default='OLS',help='Model Type')
+
+	classify_parents = [Paths,Counts,Classify,Plot]
+
+
+
+	classify_help = (help_format % ('genes,samples','Classify data'))
+	classify = subs.add_parser('classify',help=classify_help).add_subparsers(help='wow',dest='command',title="Commands")
+	markers = classify.add_parser('markers',parents= classify_parents, help='./rage classify markers -c my.cnts  --id treatment')
+	batches = classify.add_parser('batches',parents= classify_parents, help='./rage classify find-batches -c my.cnts  --id treatment')
+	groups = classify.add_parser('groups',  parents= classify_parents, help='./rage classify groups -c my.cnts  --id treatment')
+
+
+
+
+	Transform = MyParser(add_help=False)
+	Transform.add_argument('--phenotype', dest='predictors',nargs='+',type=str,default=[],help='Variables for covariates')
+	Transform.add_argument('--condense', dest='condense',action='store',type=int,default=10,help='Condensation Size')
+	Transform.add_argument('--coeffs',type=argparse.FileType('r'),help='Precomputed Coeffs') 
+	Transform.add_argument('--iterative',action='store_true', dest='iterative',default=False,help='Iterative?')
+	Transform.add_argument('--scaling', dest='scaling',type=str,default=None,help='Covariate variable zero prob')
+	transform_help = (help_format % ('genes,samples','Transform data'))
+	transform = subs.add_parser('transform',help=transform_help,formatter_class=fc).add_subparsers(help='Examples:',dest='command',title="Commands")
+
+
+	pca = transform.add_parser('pca',parents=[Paths,Counts,Plot,Transform], help='./rage transform pca -c my.cnts')
+	dim = transform.add_parser('dim',parents=[Paths,Counts,Plot,Transform], help='./rage transform dim -c my.cnts ')
+	tsne = transform.add_parser('tsne',parents=[Paths,Counts,Plot,Transform], help='./rage transform tsne -c my.cnts ')
+	condense = transform.add_parser('condensation',parents=[Paths,Counts,Plot,Transform], help='./rage transform condensation -c my.cnts')
+#	fabricate = transform.add_parser('fabrication',parents=[Paths,Counts,Plot,Transform], help='./rage transform samples ')
+
+
+
+
+
+
+
+
+#	Simulate = MyParser(add_help=False)
+#	Simulate.add_argument('--predictors', dest='predictors',nargs='+',type=str,default=[],help='Variables for covariates')
+#	Simulate.add_argument('--dexrate', dest='dex_rate',action='store',type=float,default=0.09,help='Simulated Rate of Dex Genes')
+#	Simulate.add_argument('--nologs',action='store_true', dest='rawspace',default=False,help='center means?')
+#	Simulate.add_argument('--randomize',action='store_true', dest='randomize',default=False,help='center means?')
+#	simulate_help = (help_format % ('genes,samples','Compare expression across phenotypes'))
+#	simulate = subs.add_parser('simulate',help=summarize_help).add_subparsers(help='wow',dest='command',title="Commands")
+
+
+#	dex   	  = simulate.add_parser('dex',parents=[Paths,Plot,Simulate], help='./rage prune genes --counts gene.cnts --  -p treatment')
+#	samples   = simulate.add_parser('samples',parents=[Paths,Plot,Summarize], help='./rage prune genes --counts gene.cnts --  -p treatment')
+
+
+
+
+
+
+
+	### PLOT PARENTS ###
+
+
+########################################################################################################################################################################
+########################################################################################################################################################################
+# RUN                          #########################################################################################################################################
+
+
+
+	args = parser.parse_args()
+	from src.Rage import Rage
+
+	rage = Rage(args,sys.argv)
+	
+	 
+
+				
+			
+	
+
+
+
+		
+
+
+
+
+
+
+
+
+
+
+

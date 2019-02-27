@@ -1,0 +1,42 @@
+
+# formula: response ~ predictor + predictor
+from collections import Counter as cc
+from collections import defaultdict as dd
+from math import exp
+from math import fabs
+from math import factorial 
+from math import log
+from operator import mul
+from random import random
+from random import shuffle
+from scipy.signal import savgol_filter as svgf 
+from scipy.stats import chisquare
+from scipy.stats import pearsonr as pearsonr
+from scipy.stats import poisson as PSN 
+#from scipy.stats import spearmanr as spearmanr
+from scipy.stats import spearmanr as spearmanr
+from scipy.stats import ttest_ind 
+from scipy.stats import variation as coVar 
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KernelDensity
+from sklearn.preprocessing import MinMaxScaler
+from statsmodels.stats import power as smp 
+from statsmodels.stats.multitest import fdrcorrection as fdr
+from statsmodels.stats.outliers_influence import variance_inflation_factor as vif 
+# import formula api as alias smf
+import itertools
+import math
+import matplotlib
+import matplotlib.pyplot as plt
+import numpy as np
+import os
+import pandas as pd
+import pylab 
+import random
+import scipy.spatial.distance as sds 
+import scipy.stats as stats
+import seaborn
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+import sys
+#!/usr/bin/env python
